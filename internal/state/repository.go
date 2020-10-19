@@ -100,8 +100,9 @@ func (r *Repository) load(key string, obj Object) error {
 }
 
 func (r *Repository) store(obj Object) error {
-	key := obj.GetName()
+	obj.GetObjectKind().SetVersionKind(r.objVK)
 
+	key := obj.GetName()
 	data, err := json.Marshal(obj)
 	if err != nil {
 		return err
@@ -194,6 +195,7 @@ func (r *Repository) Update(ctx context.Context, obj Object) error {
 	r.mux.Lock()
 	defer r.mux.Unlock()
 
+	// Get existing
 	existing, err := r.scheme.New(r.objVK)
 	if err != nil {
 		return err
@@ -214,6 +216,58 @@ func (r *Repository) Update(ctx context.Context, obj Object) error {
 	obj.SetGeneration(existingObj.GetGeneration() + 1)
 	i, _ := strconv.Atoi(existingObj.GetResourceVersion())
 	obj.SetResourceVersion(strconv.Itoa(i + 1))
+
+	// Ensure Status is not updated, if the field exists
+	statusField := reflect.ValueOf(obj).Elem().FieldByName("Status")
+	if statusField.IsValid() {
+		statusField.Set(
+			reflect.ValueOf(existingObj).Elem().FieldByName("Status"),
+		)
+	}
+
+	return r.store(obj)
+}
+
+func (r *Repository) UpdateStatus(ctx context.Context, obj Object) error {
+	if err := r.checkObjType(obj); err != nil {
+		return err
+	}
+
+	r.mux.Lock()
+	defer r.mux.Unlock()
+
+	// Get existing
+	existing, err := r.scheme.New(r.objVK)
+	if err != nil {
+		return err
+	}
+	existingObj := existing.(Object)
+
+	key := obj.GetName()
+	if err := r.load(key, existingObj); err != nil {
+		return err
+	}
+
+	// Check ResourceVersion
+	if existingObj.GetResourceVersion() != obj.GetResourceVersion() {
+		return ErrConflict{Key: key, VK: r.objVK}
+	}
+
+	// Update (no generation update)
+	i, _ := strconv.Atoi(existingObj.GetResourceVersion())
+	obj.SetResourceVersion(strconv.Itoa(i + 1))
+
+	// Ensure ObjectMeta and Spec is not updated
+	reflect.ValueOf(obj).Elem().FieldByName("ObjectMeta").Set(
+		reflect.ValueOf(existingObj).Elem().FieldByName("ObjectMeta"),
+	)
+	specField := reflect.ValueOf(obj).Elem().FieldByName("Spec")
+	if specField.IsValid() {
+		specField.Set(
+			reflect.ValueOf(existingObj).Elem().FieldByName("Spec"),
+		)
+	}
+
 	return r.store(obj)
 }
 
