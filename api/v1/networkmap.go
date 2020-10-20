@@ -56,7 +56,7 @@ type NetworkMapSpec struct {
 
 	// Network Maps
 	// Configures how a private network is mapped to a public network.
-	NetMap []NetMap `json:"netmap"`
+	NetMap []NetMap `json:"netmap,omitempty"`
 }
 
 type NetMap struct {
@@ -77,7 +77,7 @@ type NetworkMapNetworkPointer struct {
 
 type NetworkMapStatus struct {
 	ObservedGeneration int64          `json:"observedGeneration"`
-	NetMap             []NetMapStatus `json:"netmap"`
+	NetMap             []NetMapStatus `json:"netmap,omitempty"`
 }
 
 type NetMapStatus struct {
@@ -85,15 +85,11 @@ type NetMapStatus struct {
 	Public  string `json:"public"`
 }
 
-func (nm *NetworkMap) DeepCopyInto(obj *NetworkMap) {
-	if err := copier.Copy(obj, nm); err != nil {
-		panic(err)
-	}
-}
-
 func (nm *NetworkMap) DeepCopy() *NetworkMap {
 	new := &NetworkMap{}
-	nm.DeepCopyInto(new)
+	if err := copier.Copy(new, nm); err != nil {
+		panic(err)
+	}
 	return new
 }
 

@@ -19,6 +19,7 @@ package runtime
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/routerd/ipv6d/internal/runtime/schema"
 )
@@ -88,5 +89,34 @@ func (s *Scheme) VersionKind(obj Object) (schema.VersionKind, error) {
 	if vk, ok := s.typeToVK[rt]; ok {
 		return vk, nil
 	}
-	return schema.VersionKind{}, fmt.Errorf("object %t is not registered", obj)
+	return schema.VersionKind{}, fmt.Errorf("object %T is not registered", obj)
+}
+
+func (s *Scheme) ListVersionKind(obj Object) (schema.VersionKind, error) {
+	vk, err := s.VersionKind(obj)
+	if err != nil {
+		return schema.VersionKind{}, err
+	}
+
+	listVK := schema.VersionKind{
+		Version: vk.Version,
+		Kind:    vk.Kind + "List",
+	}
+	if _, ok := s.vkToType[listVK]; !ok {
+		return schema.VersionKind{},
+			fmt.Errorf("no list type for %s is not registered", obj)
+	}
+	return listVK, nil
+}
+
+func (s *Scheme) KnownObjectKinds() []schema.VersionKind {
+	var vks []schema.VersionKind
+	for vk := range s.vkToType {
+		if strings.HasSuffix(vk.Kind, "List") {
+			continue
+		}
+
+		vks = append(vks, vk)
+	}
+	return vks
 }

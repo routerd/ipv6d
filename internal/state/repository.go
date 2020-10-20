@@ -24,25 +24,20 @@ import (
 	"strconv"
 	"sync"
 
-	v1 "github.com/routerd/ipv6d/api/v1"
 	"github.com/routerd/ipv6d/internal/runtime"
 	"github.com/routerd/ipv6d/internal/runtime/schema"
+)
+
+var (
+	_ Client = &Repository{}
 )
 
 type Repository struct {
 	scheme        *runtime.Scheme
 	objVK, listVK schema.VersionKind
 	mux           sync.Mutex
+	eventHub      *eventHub
 	data          map[string][]byte
-}
-
-type Object interface {
-	v1.Object
-	runtime.Object
-}
-
-type ObjectList interface {
-	runtime.Object
 }
 
 func NewRepository(scheme *runtime.Scheme, obj Object, listObj ObjectList) (*Repository, error) {
@@ -57,11 +52,16 @@ func NewRepository(scheme *runtime.Scheme, obj Object, listObj ObjectList) (*Rep
 	}
 
 	return &Repository{
-		scheme: scheme,
-		objVK:  objVK,
-		listVK: listVK,
-		data:   map[string][]byte{},
+		scheme:   scheme,
+		objVK:    objVK,
+		listVK:   listVK,
+		eventHub: newEventHub(),
+		data:     map[string][]byte{},
 	}, nil
+}
+
+func (r *Repository) Run(stopCh <-chan struct{}) {
+	r.eventHub.Run(stopCh)
 }
 
 func (r *Repository) checkObjType(obj Object) error {
@@ -150,6 +150,10 @@ func (r *Repository) List(ctx context.Context, listObj ObjectList) error {
 	return nil
 }
 
+func (r *Repository) Watch(ctx context.Context, obj Object) (Watcher, error) {
+	return r.eventHub.Register(), nil
+}
+
 // Writer
 
 func (r *Repository) Create(ctx context.Context, obj Object) error {
@@ -168,7 +172,11 @@ func (r *Repository) Create(ctx context.Context, obj Object) error {
 	obj.SetGeneration(1)
 	obj.SetResourceVersion("1")
 
-	return r.store(obj)
+	if err := r.store(obj); err != nil {
+		return err
+	}
+	r.eventHub.Broadcast(nil, obj)
+	return nil
 }
 
 func (r *Repository) Delete(ctx context.Context, obj Object) error {
@@ -180,10 +188,11 @@ func (r *Repository) Delete(ctx context.Context, obj Object) error {
 	defer r.mux.Unlock()
 
 	key := obj.GetName()
-	if _, ok := r.data[key]; ok {
-		return ErrNotFound{Key: key, VK: r.objVK}
+	if err := r.load(key, obj); err != nil {
+		return err
 	}
 	delete(r.data, key)
+	r.eventHub.Broadcast(obj, nil)
 	return nil
 }
 
@@ -225,7 +234,11 @@ func (r *Repository) Update(ctx context.Context, obj Object) error {
 		)
 	}
 
-	return r.store(obj)
+	if err := r.store(obj); err != nil {
+		return err
+	}
+	r.eventHub.Broadcast(existingObj, obj)
+	return nil
 }
 
 func (r *Repository) UpdateStatus(ctx context.Context, obj Object) error {
@@ -253,10 +266,6 @@ func (r *Repository) UpdateStatus(ctx context.Context, obj Object) error {
 		return ErrConflict{Key: key, VK: r.objVK}
 	}
 
-	// Update (no generation update)
-	i, _ := strconv.Atoi(existingObj.GetResourceVersion())
-	obj.SetResourceVersion(strconv.Itoa(i + 1))
-
 	// Ensure ObjectMeta and Spec is not updated
 	reflect.ValueOf(obj).Elem().FieldByName("ObjectMeta").Set(
 		reflect.ValueOf(existingObj).Elem().FieldByName("ObjectMeta"),
@@ -268,7 +277,15 @@ func (r *Repository) UpdateStatus(ctx context.Context, obj Object) error {
 		)
 	}
 
-	return r.store(obj)
+	// Update (no generation update)
+	i, _ := strconv.Atoi(existingObj.GetResourceVersion())
+	obj.SetResourceVersion(strconv.Itoa(i + 1))
+
+	if err := r.store(obj); err != nil {
+		return err
+	}
+	r.eventHub.Broadcast(existingObj, obj)
+	return nil
 }
 
 type ErrConflict struct {

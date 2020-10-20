@@ -18,8 +18,10 @@ package state
 
 import (
 	"context"
+	"sync"
 	"testing"
 
+	"github.com/jinzhu/copier"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -27,28 +29,245 @@ import (
 	"github.com/routerd/ipv6d/internal/runtime"
 )
 
-var scheme = runtime.NewScheme()
+var testScheme = runtime.NewScheme()
+
+type testObjectList struct {
+	v1.TypeMeta `json:",inline"`
+	Items       []testObject `json:"items"`
+}
+
+func (o *testObjectList) DeepCopy() *testObjectList {
+	new := &testObjectList{}
+	if err := copier.Copy(new, o); err != nil {
+		panic(err)
+	}
+	return new
+}
+
+func (o *testObjectList) DeepCopyObject() runtime.Object {
+	return o.DeepCopy()
+}
+
+type testObject struct {
+	v1.TypeMeta   `json:",inline"`
+	v1.ObjectMeta `json:"metadata"`
+}
+
+func (o *testObject) DeepCopy() *testObject {
+	new := &testObject{}
+	if err := copier.Copy(new, o); err != nil {
+		panic(err)
+	}
+	return new
+}
+
+func (o *testObject) DeepCopyObject() runtime.Object {
+	return o.DeepCopy()
+}
 
 func init() {
-	v1.AddToScheme(scheme)
+	testScheme.AddKnownTypes("v1", &testObject{}, &testObjectList{})
 }
 
 func TestRepository(t *testing.T) {
-	t.Run("List", func(t *testing.T) {
-		r, err := NewRepository(scheme, &v1.NetworkMap{}, &v1.NetworkMapList{})
+	t.Run("Get", func(t *testing.T) {
+		r, err := NewRepository(testScheme, &testObject{}, &testObjectList{})
 		require.NoError(t, err)
-		ctx := context.Background()
+
+		// Run
+		stopCh := make(chan struct{})
+		go r.Run(stopCh)
+		defer close(stopCh)
 
 		// Inject some data
 		r.data["test123"] = []byte(`{"metadata": {"name":"test123"}}`)
 
 		// List
-		list := &v1.NetworkMapList{}
+		ctx := context.Background()
+		obj := &testObject{}
+		err = r.Get(ctx, "test123", obj)
+		require.NoError(t, err)
+
+		assert.Equal(t, "test123", obj.Name)
+	})
+
+	t.Run("List", func(t *testing.T) {
+		r, err := NewRepository(testScheme, &testObject{}, &testObjectList{})
+		require.NoError(t, err)
+
+		// Run
+		stopCh := make(chan struct{})
+		go r.Run(stopCh)
+		defer close(stopCh)
+
+		// Inject some data
+		r.data["test123"] = []byte(`{"metadata": {"name":"test123"}}`)
+
+		// List
+		ctx := context.Background()
+		list := &testObjectList{}
 		err = r.List(ctx, list)
 		require.NoError(t, err)
 
 		if assert.Len(t, list.Items, 1) {
 			assert.Equal(t, "test123", list.Items[0].Name)
 		}
+	})
+
+	t.Run("Watch", func(t *testing.T) {
+		r, err := NewRepository(testScheme, &testObject{}, &testObjectList{})
+		require.NoError(t, err)
+
+		// Run
+		stopCh := make(chan struct{})
+		go r.Run(stopCh)
+		defer close(stopCh)
+
+		// Watch
+		ctx := context.Background()
+		watcher, err := r.Watch(ctx, nil)
+		require.NoError(t, err)
+
+		var events []Event
+		var wg sync.WaitGroup
+		wg.Add(1) // wait for 1 event
+		go func() {
+			for event := range watcher.ResultChan() {
+				events = append(events, event)
+				wg.Done()
+			}
+		}()
+
+		// generate a "Added" event
+		obj := &testObject{ObjectMeta: v1.ObjectMeta{Name: "test3000"}}
+		require.NoError(t, r.Create(ctx, obj))
+
+		// Assertions
+		wg.Wait()
+		if assert.Len(t, events, 1) {
+			assert.Equal(t, Event{New: obj}, events[0])
+			assert.Equal(t, Added, events[0].Type())
+		}
+	})
+
+	t.Run("Create", func(t *testing.T) {
+		r, err := NewRepository(testScheme, &testObject{}, &testObjectList{})
+		require.NoError(t, err)
+
+		// Run
+		stopCh := make(chan struct{})
+		go r.Run(stopCh)
+		defer close(stopCh)
+
+		// Create
+		ctx := context.Background()
+		obj := &testObject{ObjectMeta: v1.ObjectMeta{Name: "test3000"}}
+		require.NoError(t, r.Create(ctx, obj))
+
+		assert.Equal(t,
+			`{"kind":"testObject","version":"v1","metadata":{"name":"test3000","generation":1,"resourceVersion":"1"}}`,
+			string(r.data["test3000"]))
+	})
+
+	t.Run("Update", func(t *testing.T) {
+		r, err := NewRepository(testScheme, &testObject{}, &testObjectList{})
+		require.NoError(t, err)
+
+		// Run
+		stopCh := make(chan struct{})
+		go r.Run(stopCh)
+		defer close(stopCh)
+
+		// Inject some data
+		r.data["test123"] = []byte(`{"metadata": {"name":"test123","generation":3,"resourceVersion":"53"}}`)
+
+		// Update
+		ctx := context.Background()
+		obj := &testObject{ObjectMeta: v1.ObjectMeta{
+			Name:            "test123",
+			Generation:      3,
+			ResourceVersion: "53",
+		}}
+		require.NoError(t, r.Update(ctx, obj))
+
+		assert.Equal(t,
+			`{"kind":"testObject","version":"v1","metadata":{"name":"test123","generation":4,"resourceVersion":"54"}}`,
+			string(r.data["test123"]))
+	})
+
+	t.Run("Update", func(t *testing.T) {
+		r, err := NewRepository(testScheme, &testObject{}, &testObjectList{})
+		require.NoError(t, err)
+
+		// Run
+		stopCh := make(chan struct{})
+		go r.Run(stopCh)
+		defer close(stopCh)
+
+		// Inject some data
+		r.data["test123"] = []byte(`{"metadata": {"name":"test123","generation":3,"resourceVersion":"53"}}`)
+
+		// Update
+		ctx := context.Background()
+		obj := &testObject{ObjectMeta: v1.ObjectMeta{
+			Name:            "test123",
+			Generation:      3,
+			ResourceVersion: "53",
+		}}
+		require.NoError(t, r.Update(ctx, obj))
+
+		assert.Equal(t,
+			`{"kind":"testObject","version":"v1","metadata":{"name":"test123","generation":4,"resourceVersion":"54"}}`,
+			string(r.data["test123"]))
+	})
+
+	t.Run("UpdateStatus", func(t *testing.T) {
+		r, err := NewRepository(testScheme, &testObject{}, &testObjectList{})
+		require.NoError(t, err)
+
+		// Run
+		stopCh := make(chan struct{})
+		go r.Run(stopCh)
+		defer close(stopCh)
+
+		// Inject some data
+		r.data["test123"] = []byte(`{"metadata": {"name":"test123","generation":3,"resourceVersion":"53"}}`)
+
+		// UpdateStatus
+		ctx := context.Background()
+		obj := &testObject{ObjectMeta: v1.ObjectMeta{
+			Name:            "test123",
+			Generation:      3,
+			ResourceVersion: "53",
+		}}
+		require.NoError(t, r.UpdateStatus(ctx, obj))
+
+		assert.Equal(t,
+			`{"kind":"testObject","version":"v1","metadata":{"name":"test123","generation":3,"resourceVersion":"54"}}`,
+			string(r.data["test123"]))
+	})
+
+	t.Run("Delete", func(t *testing.T) {
+		r, err := NewRepository(testScheme, &testObject{}, &testObjectList{})
+		require.NoError(t, err)
+
+		// Run
+		stopCh := make(chan struct{})
+		go r.Run(stopCh)
+		defer close(stopCh)
+
+		// Inject some data
+		r.data["test123"] = []byte(`{"metadata": {"name":"test123","generation":3,"resourceVersion":"53"}}`)
+
+		// Delete
+		ctx := context.Background()
+		obj := &testObject{ObjectMeta: v1.ObjectMeta{
+			Name:            "test123",
+			Generation:      3,
+			ResourceVersion: "53",
+		}}
+		require.NoError(t, r.Delete(ctx, obj))
+
+		assert.Zero(t, r.data["test123"])
 	})
 }
