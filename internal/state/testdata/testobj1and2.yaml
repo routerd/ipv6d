@@ -1,0 +1,9 @@
+version: v1
+kind: testObject
+metadata:
+  name: test1
+---
+version: v1
+kind: testObject
+metadata:
+  name: test2

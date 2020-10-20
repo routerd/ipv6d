@@ -17,9 +17,16 @@ limitations under the License.
 package state
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 
+	"sigs.k8s.io/yaml"
+
+	v1 "github.com/routerd/ipv6d/api/v1"
 	"github.com/routerd/ipv6d/internal/runtime"
 	"github.com/routerd/ipv6d/internal/runtime/schema"
 )
@@ -31,6 +38,7 @@ type MetaRepository struct {
 
 func NewMetaRepository(scheme *runtime.Scheme) (*MetaRepository, error) {
 	mr := &MetaRepository{
+		scheme:   scheme,
 		vkToRepo: map[schema.VersionKind]*Repository{},
 	}
 
@@ -60,6 +68,54 @@ func NewMetaRepository(scheme *runtime.Scheme) (*MetaRepository, error) {
 		mr.vkToRepo[vkList] = repo
 	}
 	return mr, nil
+}
+
+type importObject struct {
+	v1.TypeMeta `json:",inline"`
+}
+
+func (r *MetaRepository) LoadFromFileSystem(folder string) error {
+	err := filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		// unmarshal
+		fileBytes, err := ioutil.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		documents := bytes.Split(fileBytes, []byte("\n---"))
+		for _, document := range documents {
+			importObj := &importObject{}
+			if err := yaml.Unmarshal(document, importObj); err != nil {
+				return err
+			}
+			kv := importObj.GetVersionKind()
+			obj, err := r.scheme.New(kv)
+			if err != nil {
+				return fmt.Errorf("importing file %s: %w", path, err)
+			}
+			if err := yaml.Unmarshal(document, obj); err != nil {
+				return err
+			}
+
+			// store
+			if err := r.Create(context.TODO(), obj.(Object)); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *MetaRepository) Run(stopCh <-chan struct{}) {

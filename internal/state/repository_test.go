@@ -21,53 +21,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jinzhu/copier"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	v1 "github.com/routerd/ipv6d/api/v1"
-	"github.com/routerd/ipv6d/internal/runtime"
 )
-
-var testScheme = runtime.NewScheme()
-
-type testObjectList struct {
-	v1.TypeMeta `json:",inline"`
-	Items       []testObject `json:"items"`
-}
-
-func (o *testObjectList) DeepCopy() *testObjectList {
-	new := &testObjectList{}
-	if err := copier.Copy(new, o); err != nil {
-		panic(err)
-	}
-	return new
-}
-
-func (o *testObjectList) DeepCopyObject() runtime.Object {
-	return o.DeepCopy()
-}
-
-type testObject struct {
-	v1.TypeMeta   `json:",inline"`
-	v1.ObjectMeta `json:"metadata"`
-}
-
-func (o *testObject) DeepCopy() *testObject {
-	new := &testObject{}
-	if err := copier.Copy(new, o); err != nil {
-		panic(err)
-	}
-	return new
-}
-
-func (o *testObject) DeepCopyObject() runtime.Object {
-	return o.DeepCopy()
-}
-
-func init() {
-	testScheme.AddKnownTypes("v1", &testObject{}, &testObjectList{})
-}
 
 func TestRepository(t *testing.T) {
 	t.Run("Get", func(t *testing.T) {

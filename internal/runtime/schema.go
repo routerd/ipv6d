@@ -80,7 +80,7 @@ func (s *Scheme) New(vk schema.VersionKind) (Object, error) {
 		new.GetObjectKind().SetVersionKind(vk)
 		return new, nil
 	}
-	return nil, fmt.Errorf("kind %s is not registered", vk.Kind)
+	return nil, fmt.Errorf("kind %s is not registered", vk)
 }
 
 func (s *Scheme) VersionKind(obj Object) (schema.VersionKind, error) {

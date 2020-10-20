@@ -1,0 +1,4 @@
+version: v1
+kind: testObject
+metadata:
+  name: test3
