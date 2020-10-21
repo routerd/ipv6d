@@ -16,4 +16,54 @@ limitations under the License.
 
 package main
 
-// type Daemon
+import (
+	"flag"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/bombsimon/logrusr"
+	"github.com/go-logr/logr"
+	"github.com/sirupsen/logrus"
+
+	v1 "routerd.net/ipv6d/api/v1"
+	"routerd.net/ipv6d/internal/machinery/runtime"
+	"routerd.net/ipv6d/internal/machinery/state"
+	"routerd.net/ipv6d/internal/npt"
+)
+
+func main() {
+	var configFolder string
+	flag.StringVar(&configFolder, "config-folder", "", "config file folder.")
+	flag.Parse()
+
+	log := logrusr.NewLogger(logrus.New())
+
+	if err := run(log, configFolder); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run(log logr.Logger, configFolder string) error {
+	scheme := runtime.NewScheme()
+	if err := v1.AddToScheme(scheme); err != nil {
+		return err
+	}
+
+	metaRepo, err := state.NewMetaRepository(scheme)
+	if err != nil {
+		return err
+	}
+
+	stopCh := make(chan struct{})
+	go metaRepo.Run(stopCh)
+
+	r, err := npt.NewReconciler(log.WithName("NPTController"), metaRepo, 5*time.Second)
+	if err != nil {
+		return err
+	}
+
+	r.Run(stopCh)
+	return nil
+}

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/go-logr/logr"
@@ -33,22 +34,26 @@ import (
 
 // Reconciler ensures private networks are mapped to public networks via Network Prefix Translation.
 type Reconciler struct {
-	log        logr.Logger
-	client     state.Client
-	ip6tables  *iptables.IPTables
-	controller *controller.Controller
+	log            logr.Logger
+	client         state.Client
+	resyncDuration time.Duration
+	ip6tables      *iptables.IPTables
+	controller     *controller.Controller
 }
 
-func NewReconciler(log logr.Logger, client state.Client) (*Reconciler, error) {
+func NewReconciler(
+	log logr.Logger, client state.Client, resyncDuration time.Duration,
+) (*Reconciler, error) {
 	ip6tables, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
 	if err != nil {
 		return nil, fmt.Errorf("ip6tables: %w", err)
 	}
 
 	r := &Reconciler{
-		log:       log,
-		client:    client,
-		ip6tables: ip6tables,
+		log:            log,
+		client:         client,
+		resyncDuration: resyncDuration,
+		ip6tables:      ip6tables,
 	}
 	r.controller = controller.NewController(log, r)
 	return r, nil
@@ -67,6 +72,8 @@ func (r *Reconciler) Reconcile(key string) (res controller.Result, err error) {
 		}
 		return res, err
 	}
+
+	res.RequeueAfter = r.resyncDuration
 
 	for _, rule := range r.rules(netmap) {
 		exists, err := r.ip6tables.Exists(rule.Table, rule.Chain, rule.Spec...)
