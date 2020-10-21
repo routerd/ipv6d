@@ -52,8 +52,17 @@ func NewController(
 }
 
 func (c *Controller) Run(stopCh <-chan struct{}) {
+	defer c.queue.ShutDown()
 	go c.worker()
 	<-stopCh
+}
+
+func (c *Controller) Add(key string) {
+	c.queue.Add(key)
+}
+
+func (c *Controller) AddAfter(key string, after time.Duration) {
+	c.queue.AddAfter(key, after)
 }
 
 func (c *Controller) worker() {

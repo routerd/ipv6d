@@ -55,9 +55,12 @@ func run(log logr.Logger, configFolder string) error {
 	if err != nil {
 		return err
 	}
-
 	stopCh := make(chan struct{})
 	go metaRepo.Run(stopCh)
+
+	if err := metaRepo.LoadFromFileSystem(log, configFolder); err != nil {
+		return err
+	}
 
 	r, err := npt.NewReconciler(log.WithName("NPTController"), metaRepo, 5*time.Second)
 	if err != nil {

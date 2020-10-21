@@ -53,7 +53,7 @@ type NetworkMapSpec struct {
 	// WAN Interface
 	// will be used as -i <IFACE> / -o <IFACE>
 	// in the iptables rule spec
-	WANInterface string `json:"wan_interface"`
+	WANInterface string `json:"wanInterface"`
 
 	// Network Maps
 	// Configures how a private network is mapped to a public network.
@@ -71,7 +71,7 @@ type NetMap struct {
 // or tells the controller how to look it up.
 type NetworkMapNetworkPointer struct {
 	// Static network configuration
-	Static string `json:"strict,omitempty"`
+	Static string `json:"static,omitempty"`
 	// Interface to lookup, will take the first non-link-local IPv6 Net
 	Interface string `json:"interface,omitempty"`
 }

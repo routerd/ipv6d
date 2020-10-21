@@ -33,6 +33,13 @@ func (e Event) Type() EventType {
 	return Modified
 }
 
+func (e Event) Object() Object {
+	if e.New != nil {
+		return e.New
+	}
+	return e.Old
+}
+
 type EventType string
 
 const (

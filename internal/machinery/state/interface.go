@@ -42,6 +42,7 @@ type Writer interface {
 	Create(ctx context.Context, obj Object) error
 	Delete(ctx context.Context, obj Object) error
 	Update(ctx context.Context, obj Object) error
+	UpdateStatus(ctx context.Context, obj Object) error
 }
 
 type Object interface {

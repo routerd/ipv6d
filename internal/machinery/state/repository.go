@@ -221,6 +221,11 @@ func (r *Repository) Update(ctx context.Context, obj Object) error {
 		return errors.ErrConflict{Key: key, VK: r.objVK}
 	}
 
+	// Check if there is a change
+	if reflect.DeepEqual(existingObj, obj) {
+		return nil
+	}
+
 	// Update
 	obj.SetGeneration(existingObj.GetGeneration() + 1)
 	i, _ := strconv.Atoi(existingObj.GetResourceVersion())
@@ -264,6 +269,11 @@ func (r *Repository) UpdateStatus(ctx context.Context, obj Object) error {
 	// Check ResourceVersion
 	if existingObj.GetResourceVersion() != obj.GetResourceVersion() {
 		return errors.ErrConflict{Key: key, VK: r.objVK}
+	}
+
+	// Check if there is a change
+	if reflect.DeepEqual(existingObj, obj) {
+		return nil
 	}
 
 	// Ensure ObjectMeta and Spec is not updated

@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/yaml"
 
 	"routerd.net/ipv6d/internal/machinery/runtime"
@@ -68,7 +69,9 @@ func NewMetaRepository(scheme *runtime.Scheme) (*MetaRepository, error) {
 	return mr, nil
 }
 
-func (r *MetaRepository) LoadFromFileSystem(folder string) error {
+func (r *MetaRepository) LoadFromFileSystem(
+	log logr.Logger, folder string,
+) error {
 	err := filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -99,6 +102,8 @@ func (r *MetaRepository) LoadFromFileSystem(folder string) error {
 			}
 
 			// store
+			log.Info(fmt.Sprintf(
+				"imported %s %s", obj.GetObjectKind(), obj.(Object).GetName()))
 			if err := r.Create(context.TODO(), obj.(Object)); err != nil {
 				return err
 			}

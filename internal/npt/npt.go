@@ -60,7 +60,45 @@ func NewReconciler(
 }
 
 func (r *Reconciler) Run(stopCh <-chan struct{}) {
-	r.controller.Run(stopCh)
+	go r.controller.Run(stopCh)
+
+	// Setup and Watch
+	ctx := context.Background()
+	w, err := r.client.Watch(ctx, &v1.NetworkMap{})
+	if err != nil {
+		panic(err)
+	}
+	defer w.Close()
+
+	list := &v1.NetworkMapList{}
+	if err := r.client.List(ctx, list); err != nil {
+		panic(err)
+	}
+
+	for _, obj := range list.Items {
+		r.controller.Add(obj.GetName())
+	}
+
+	for {
+		select {
+		case e := <-w.ResultChan():
+			if e.New != nil && e.Old != nil &&
+				e.New.GetGeneration() == e.Old.GetGeneration() {
+				// no update -> skip
+				continue
+			}
+
+			obj := e.Object()
+			if obj == nil {
+				continue
+			}
+
+			r.controller.Add(obj.GetName())
+
+		case <-stopCh:
+			return
+		}
+	}
 }
 
 func (r *Reconciler) Reconcile(key string) (res controller.Result, err error) {
@@ -75,6 +113,7 @@ func (r *Reconciler) Reconcile(key string) (res controller.Result, err error) {
 
 	res.RequeueAfter = r.resyncDuration
 
+	netmap.Status.NetMap = nil
 	for _, rule := range r.rules(netmap) {
 		exists, err := r.ip6tables.Exists(rule.Table, rule.Chain, rule.Spec...)
 		if err != nil {
@@ -88,6 +127,12 @@ func (r *Reconciler) Reconcile(key string) (res controller.Result, err error) {
 			return res, fmt.Errorf("append new rule: %w", err)
 		}
 	}
+
+	if err := r.client.UpdateStatus(ctx, netmap); err != nil {
+		return res, err
+	}
+
+	r.log.Info("reconciled NetworkMap", "name", key)
 	return
 }
 
@@ -102,7 +147,7 @@ func (r *Reconciler) rules(netmap *v1.NetworkMap) []rule {
 	for i, nm := range netmap.Spec.NetMap {
 		inbound, outbound, status, err := r.rule(netmap.Spec.WANInterface, nm)
 		if err != nil {
-			r.log.Error(err, "iptable rule for .Spec.NetMap [%d]", i)
+			r.log.Error(err, "iptable rule for .Spec.NetMap", "index", i)
 			continue
 		}
 
@@ -158,6 +203,10 @@ func (r *Reconciler) lookupNetworkPointer(pointer v1.NetworkMapNetworkPointer) (
 		return ipNet, err
 	}
 
+	if pointer.Interface == "" {
+		return nil, fmt.Errorf(".Static and .Interface cannot be empty at the same time.")
+	}
+
 	// Lookup from interface name
 	return r.lookupNetworkFromInterface(pointer.Interface)
 }
@@ -182,7 +231,7 @@ func (r *Reconciler) lookupNetworkFromInterface(ifaceName string) (*net.IPNet, e
 			return nil, fmt.Errorf("parse address %s: %w", addr, err)
 		}
 
-		if ipv6.IsIPv6(ip) {
+		if !ipv6.IsIPv6(ip) {
 			// ignore IPv4 addresses
 			continue
 		}
@@ -196,5 +245,5 @@ func (r *Reconciler) lookupNetworkFromInterface(ifaceName string) (*net.IPNet, e
 		return nil, fmt.Errorf(
 			"interface %s has no public IPv6 address", ifaceName)
 	}
-	return nil, nil
+	return publicNetwork, nil
 }
