@@ -26,20 +26,18 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	v1 "github.com/routerd/ipv6d/api/v1"
-	"github.com/routerd/ipv6d/internal/runtime"
-	"github.com/routerd/ipv6d/internal/runtime/schema"
+	"routerd.net/ipv6d/internal/machinery/runtime"
 )
 
 type MetaRepository struct {
 	scheme   *runtime.Scheme
-	vkToRepo map[schema.VersionKind]*Repository
+	vkToRepo map[runtime.VersionKind]*Repository
 }
 
 func NewMetaRepository(scheme *runtime.Scheme) (*MetaRepository, error) {
 	mr := &MetaRepository{
 		scheme:   scheme,
-		vkToRepo: map[schema.VersionKind]*Repository{},
+		vkToRepo: map[runtime.VersionKind]*Repository{},
 	}
 
 	vks := scheme.KnownObjectKinds()
@@ -70,10 +68,6 @@ func NewMetaRepository(scheme *runtime.Scheme) (*MetaRepository, error) {
 	return mr, nil
 }
 
-type importObject struct {
-	v1.TypeMeta `json:",inline"`
-}
-
 func (r *MetaRepository) LoadFromFileSystem(folder string) error {
 	err := filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -91,12 +85,12 @@ func (r *MetaRepository) LoadFromFileSystem(folder string) error {
 
 		documents := bytes.Split(fileBytes, []byte("\n---"))
 		for _, document := range documents {
-			importObj := &importObject{}
-			if err := yaml.Unmarshal(document, importObj); err != nil {
+			vk := runtime.VersionKind{}
+			if err := yaml.Unmarshal(document, &vk); err != nil {
 				return err
 			}
-			kv := importObj.GetVersionKind()
-			obj, err := r.scheme.New(kv)
+
+			obj, err := r.scheme.New(vk)
 			if err != nil {
 				return fmt.Errorf("importing file %s: %w", path, err)
 			}

@@ -14,10 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package schema
+package runtime
 
 type VersionKind struct {
-	Version, Kind string
+	Version string `json:"version"`
+	Kind    string `json:"kind"`
 }
 
 func (vk VersionKind) Empty() bool {
@@ -31,4 +32,9 @@ func (vk VersionKind) String() string {
 type ObjectKind interface {
 	SetVersionKind(vk VersionKind)
 	GetVersionKind() VersionKind
+}
+
+type Object interface {
+	GetObjectKind() ObjectKind
+	DeepCopyObject() Object
 }

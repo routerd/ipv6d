@@ -16,24 +16,24 @@ limitations under the License.
 
 package v1
 
-import "github.com/routerd/ipv6d/internal/runtime/schema"
+import "routerd.net/ipv6d/internal/machinery/runtime"
 
 type TypeMeta struct {
 	Kind    string `json:"kind"`
 	Version string `json:"version"`
 }
 
-func (m *TypeMeta) GetObjectKind() schema.ObjectKind { return m }
-func (m *TypeMeta) GetKind() string                  { return m.Kind }
-func (m *TypeMeta) SetKind(kind string)              { m.Kind = kind }
-func (m *TypeMeta) GetVersion() string               { return m.Version }
-func (m *TypeMeta) SetVersion(version string)        { m.Version = version }
+func (m *TypeMeta) GetObjectKind() runtime.ObjectKind { return m }
+func (m *TypeMeta) GetKind() string                   { return m.Kind }
+func (m *TypeMeta) SetKind(kind string)               { m.Kind = kind }
+func (m *TypeMeta) GetVersion() string                { return m.Version }
+func (m *TypeMeta) SetVersion(version string)         { m.Version = version }
 
-func (m *TypeMeta) GetVersionKind() schema.VersionKind {
-	return schema.VersionKind{Version: m.Version, Kind: m.Kind}
+func (m *TypeMeta) GetVersionKind() runtime.VersionKind {
+	return runtime.VersionKind{Version: m.Version, Kind: m.Kind}
 }
 
-func (m *TypeMeta) SetVersionKind(vk schema.VersionKind) {
+func (m *TypeMeta) SetVersionKind(vk runtime.VersionKind) {
 	m.Version = vk.Version
 	m.Kind = vk.Kind
 }

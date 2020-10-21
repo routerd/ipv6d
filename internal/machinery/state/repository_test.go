@@ -23,8 +23,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	v1 "github.com/routerd/ipv6d/api/v1"
 )
 
 func TestRepository(t *testing.T) {
@@ -97,7 +95,7 @@ func TestRepository(t *testing.T) {
 		}()
 
 		// generate a "Added" event
-		obj := &testObject{ObjectMeta: v1.ObjectMeta{Name: "test3000"}}
+		obj := &testObject{ObjectMeta: ObjectMeta{Name: "test3000"}}
 		require.NoError(t, r.Create(ctx, obj))
 
 		// Assertions
@@ -119,11 +117,11 @@ func TestRepository(t *testing.T) {
 
 		// Create
 		ctx := context.Background()
-		obj := &testObject{ObjectMeta: v1.ObjectMeta{Name: "test3000"}}
+		obj := &testObject{ObjectMeta: ObjectMeta{Name: "test3000"}}
 		require.NoError(t, r.Create(ctx, obj))
 
 		assert.Equal(t,
-			`{"kind":"testObject","version":"v1","metadata":{"name":"test3000","generation":1,"resourceVersion":"1"}}`,
+			`{"version":"v1","kind":"testObject","metadata":{"name":"test3000","generation":1,"resourceVersion":"1"}}`,
 			string(r.data["test3000"]))
 	})
 
@@ -141,7 +139,7 @@ func TestRepository(t *testing.T) {
 
 		// Update
 		ctx := context.Background()
-		obj := &testObject{ObjectMeta: v1.ObjectMeta{
+		obj := &testObject{ObjectMeta: ObjectMeta{
 			Name:            "test123",
 			Generation:      3,
 			ResourceVersion: "53",
@@ -149,7 +147,7 @@ func TestRepository(t *testing.T) {
 		require.NoError(t, r.Update(ctx, obj))
 
 		assert.Equal(t,
-			`{"kind":"testObject","version":"v1","metadata":{"name":"test123","generation":4,"resourceVersion":"54"}}`,
+			`{"version":"v1","kind":"testObject","metadata":{"name":"test123","generation":4,"resourceVersion":"54"}}`,
 			string(r.data["test123"]))
 	})
 
@@ -167,7 +165,7 @@ func TestRepository(t *testing.T) {
 
 		// Update
 		ctx := context.Background()
-		obj := &testObject{ObjectMeta: v1.ObjectMeta{
+		obj := &testObject{ObjectMeta: ObjectMeta{
 			Name:            "test123",
 			Generation:      3,
 			ResourceVersion: "53",
@@ -175,7 +173,7 @@ func TestRepository(t *testing.T) {
 		require.NoError(t, r.Update(ctx, obj))
 
 		assert.Equal(t,
-			`{"kind":"testObject","version":"v1","metadata":{"name":"test123","generation":4,"resourceVersion":"54"}}`,
+			`{"version":"v1","kind":"testObject","metadata":{"name":"test123","generation":4,"resourceVersion":"54"}}`,
 			string(r.data["test123"]))
 	})
 
@@ -193,7 +191,7 @@ func TestRepository(t *testing.T) {
 
 		// UpdateStatus
 		ctx := context.Background()
-		obj := &testObject{ObjectMeta: v1.ObjectMeta{
+		obj := &testObject{ObjectMeta: ObjectMeta{
 			Name:            "test123",
 			Generation:      3,
 			ResourceVersion: "53",
@@ -201,7 +199,7 @@ func TestRepository(t *testing.T) {
 		require.NoError(t, r.UpdateStatus(ctx, obj))
 
 		assert.Equal(t,
-			`{"kind":"testObject","version":"v1","metadata":{"name":"test123","generation":3,"resourceVersion":"54"}}`,
+			`{"version":"v1","kind":"testObject","metadata":{"name":"test123","generation":3,"resourceVersion":"54"}}`,
 			string(r.data["test123"]))
 	})
 
@@ -219,7 +217,7 @@ func TestRepository(t *testing.T) {
 
 		// Delete
 		ctx := context.Background()
-		obj := &testObject{ObjectMeta: v1.ObjectMeta{
+		obj := &testObject{ObjectMeta: ObjectMeta{
 			Name:            "test123",
 			Generation:      3,
 			ResourceVersion: "53",

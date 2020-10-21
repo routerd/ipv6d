@@ -18,10 +18,11 @@ package v1
 
 import (
 	"github.com/jinzhu/copier"
-	"github.com/routerd/ipv6d/internal/runtime"
+
+	"routerd.net/ipv6d/internal/machinery/runtime"
 )
 
-var _ runtime.Object = &NetworkMap{}
+var _ Object = &NetworkMap{}
 
 type NetworkMapList struct {
 	TypeMeta `json:",inline"`

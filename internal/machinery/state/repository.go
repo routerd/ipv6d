@@ -24,8 +24,8 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/routerd/ipv6d/internal/runtime"
-	"github.com/routerd/ipv6d/internal/runtime/schema"
+	"routerd.net/ipv6d/internal/machinery/errors"
+	"routerd.net/ipv6d/internal/machinery/runtime"
 )
 
 var (
@@ -34,7 +34,7 @@ var (
 
 type Repository struct {
 	scheme        *runtime.Scheme
-	objVK, listVK schema.VersionKind
+	objVK, listVK runtime.VersionKind
 	mux           sync.Mutex
 	eventHub      *eventHub
 	data          map[string][]byte
@@ -91,7 +91,7 @@ func (r *Repository) checkObjListType(obj ObjectList) error {
 func (r *Repository) load(key string, obj Object) error {
 	data, ok := r.data[key]
 	if !ok {
-		return ErrNotFound{Key: key, VK: r.objVK}
+		return errors.ErrNotFound{Key: key, VK: r.objVK}
 	}
 	if err := json.Unmarshal(data, obj); err != nil {
 		return err
@@ -166,7 +166,7 @@ func (r *Repository) Create(ctx context.Context, obj Object) error {
 
 	key := obj.GetName()
 	if _, ok := r.data[key]; ok {
-		return ErrAlreadyExists{Key: key, VK: r.objVK}
+		return errors.ErrAlreadyExists{Key: key, VK: r.objVK}
 	}
 
 	obj.SetGeneration(1)
@@ -218,7 +218,7 @@ func (r *Repository) Update(ctx context.Context, obj Object) error {
 
 	// Check ResourceVersion
 	if existingObj.GetResourceVersion() != obj.GetResourceVersion() {
-		return ErrConflict{Key: key, VK: r.objVK}
+		return errors.ErrConflict{Key: key, VK: r.objVK}
 	}
 
 	// Update
@@ -263,7 +263,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, obj Object) error {
 
 	// Check ResourceVersion
 	if existingObj.GetResourceVersion() != obj.GetResourceVersion() {
-		return ErrConflict{Key: key, VK: r.objVK}
+		return errors.ErrConflict{Key: key, VK: r.objVK}
 	}
 
 	// Ensure ObjectMeta and Spec is not updated
@@ -286,31 +286,4 @@ func (r *Repository) UpdateStatus(ctx context.Context, obj Object) error {
 	}
 	r.eventHub.Broadcast(existingObj, obj)
 	return nil
-}
-
-type ErrConflict struct {
-	Key string
-	VK  schema.VersionKind
-}
-
-func (e ErrConflict) Error() string {
-	return fmt.Sprintf("%s: %s conflicting resource version", e.VK, e.Key)
-}
-
-type ErrAlreadyExists struct {
-	Key string
-	VK  schema.VersionKind
-}
-
-func (e ErrAlreadyExists) Error() string {
-	return fmt.Sprintf("%s: %s already exists", e.VK, e.Key)
-}
-
-type ErrNotFound struct {
-	Key string
-	VK  schema.VersionKind
-}
-
-func (e ErrNotFound) Error() string {
-	return fmt.Sprintf("%s: %s not found", e.VK, e.Key)
 }

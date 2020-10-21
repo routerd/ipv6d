@@ -20,24 +20,17 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-
-	"github.com/routerd/ipv6d/internal/runtime/schema"
 )
 
-type Object interface {
-	GetObjectKind() schema.ObjectKind
-	DeepCopyObject() Object
-}
-
 type Scheme struct {
-	vkToType map[schema.VersionKind]reflect.Type
-	typeToVK map[reflect.Type]schema.VersionKind
+	vkToType map[VersionKind]reflect.Type
+	typeToVK map[reflect.Type]VersionKind
 }
 
 func NewScheme() *Scheme {
 	return &Scheme{
-		vkToType: map[schema.VersionKind]reflect.Type{},
-		typeToVK: map[reflect.Type]schema.VersionKind{},
+		vkToType: map[VersionKind]reflect.Type{},
+		typeToVK: map[reflect.Type]VersionKind{},
 	}
 }
 
@@ -57,14 +50,14 @@ func ensureStructPointer(obj Object) reflect.Type {
 func (s *Scheme) AddKnownTypes(version string, types ...Object) {
 	for _, obj := range types {
 		rt := ensureStructPointer(obj)
-		s.AddKnownTypeWithKind(schema.VersionKind{
+		s.AddKnownTypeWithKind(VersionKind{
 			Version: version,
 			Kind:    rt.Name(),
 		}, obj)
 	}
 }
 
-func (s *Scheme) AddKnownTypeWithKind(vk schema.VersionKind, obj Object) {
+func (s *Scheme) AddKnownTypeWithKind(vk VersionKind, obj Object) {
 	if len(vk.Version) == 0 {
 		panic("Version is required on all types.")
 	}
@@ -74,7 +67,7 @@ func (s *Scheme) AddKnownTypeWithKind(vk schema.VersionKind, obj Object) {
 	s.typeToVK[rt] = vk
 }
 
-func (s *Scheme) New(vk schema.VersionKind) (Object, error) {
+func (s *Scheme) New(vk VersionKind) (Object, error) {
 	if rt, exists := s.vkToType[vk]; exists {
 		new := reflect.New(rt).Interface().(Object)
 		new.GetObjectKind().SetVersionKind(vk)
@@ -83,34 +76,34 @@ func (s *Scheme) New(vk schema.VersionKind) (Object, error) {
 	return nil, fmt.Errorf("kind %s is not registered", vk)
 }
 
-func (s *Scheme) VersionKind(obj Object) (schema.VersionKind, error) {
+func (s *Scheme) VersionKind(obj Object) (VersionKind, error) {
 	rt := ensureStructPointer(obj)
 
 	if vk, ok := s.typeToVK[rt]; ok {
 		return vk, nil
 	}
-	return schema.VersionKind{}, fmt.Errorf("object %T is not registered", obj)
+	return VersionKind{}, fmt.Errorf("object %T is not registered", obj)
 }
 
-func (s *Scheme) ListVersionKind(obj Object) (schema.VersionKind, error) {
+func (s *Scheme) ListVersionKind(obj Object) (VersionKind, error) {
 	vk, err := s.VersionKind(obj)
 	if err != nil {
-		return schema.VersionKind{}, err
+		return VersionKind{}, err
 	}
 
-	listVK := schema.VersionKind{
+	listVK := VersionKind{
 		Version: vk.Version,
 		Kind:    vk.Kind + "List",
 	}
 	if _, ok := s.vkToType[listVK]; !ok {
-		return schema.VersionKind{},
+		return VersionKind{},
 			fmt.Errorf("no list type for %s is not registered", obj)
 	}
 	return listVK, nil
 }
 
-func (s *Scheme) KnownObjectKinds() []schema.VersionKind {
-	var vks []schema.VersionKind
+func (s *Scheme) KnownObjectKinds() []VersionKind {
+	var vks []VersionKind
 	for vk := range s.vkToType {
 		if strings.HasSuffix(vk.Kind, "List") {
 			continue

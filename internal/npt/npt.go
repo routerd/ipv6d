@@ -17,49 +17,71 @@ limitations under the License.
 package npt
 
 import (
+	"context"
 	"fmt"
 	"net"
 
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/go-logr/logr"
 
-	v1 "github.com/routerd/ipv6d/api/v1"
-	"github.com/routerd/ipv6d/internal/utils/ipv6"
+	v1 "routerd.net/ipv6d/api/v1"
+	"routerd.net/ipv6d/internal/machinery/controller"
+	"routerd.net/ipv6d/internal/machinery/errors"
+	"routerd.net/ipv6d/internal/machinery/state"
+	"routerd.net/ipv6d/internal/utils/ipv6"
 )
 
 // Reconciler ensures private networks are mapped to public networks via Network Prefix Translation.
 type Reconciler struct {
-	log       logr.Logger
-	ip6tables *iptables.IPTables
+	log        logr.Logger
+	client     state.Client
+	ip6tables  *iptables.IPTables
+	controller *controller.Controller
 }
 
-func NewReconciler(log logr.Logger) (*Reconciler, error) {
+func NewReconciler(log logr.Logger, client state.Client) (*Reconciler, error) {
 	ip6tables, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
 	if err != nil {
 		return nil, fmt.Errorf("ip6tables: %w", err)
 	}
 
-	return &Reconciler{
+	r := &Reconciler{
 		log:       log,
+		client:    client,
 		ip6tables: ip6tables,
-	}, nil
+	}
+	r.controller = controller.NewController(log, r)
+	return r, nil
 }
 
-func (r *Reconciler) Reconcile(netmap *v1.NetworkMap) error {
+func (r *Reconciler) Run(stopCh <-chan struct{}) {
+	r.controller.Run(stopCh)
+}
+
+func (r *Reconciler) Reconcile(key string) (res controller.Result, err error) {
+	ctx := context.Background()
+	netmap := &v1.NetworkMap{}
+	if err := r.client.Get(ctx, key, netmap); err != nil {
+		if errors.IsNotFound(err) {
+			return res, nil
+		}
+		return res, err
+	}
+
 	for _, rule := range r.rules(netmap) {
 		exists, err := r.ip6tables.Exists(rule.Table, rule.Chain, rule.Spec...)
 		if err != nil {
-			return fmt.Errorf("checking rule exists: %w", err)
+			return res, fmt.Errorf("checking rule exists: %w", err)
 		}
 
 		if exists {
 			continue
 		}
 		if err := r.ip6tables.Append(rule.Table, rule.Chain, rule.Spec...); err != nil {
-			return fmt.Errorf("append new rule: %w", err)
+			return res, fmt.Errorf("append new rule: %w", err)
 		}
 	}
-	return nil
+	return
 }
 
 type rule struct {

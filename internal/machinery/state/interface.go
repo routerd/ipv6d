@@ -19,8 +19,7 @@ package state
 import (
 	"context"
 
-	v1 "github.com/routerd/ipv6d/api/v1"
-	"github.com/routerd/ipv6d/internal/runtime"
+	"routerd.net/ipv6d/internal/machinery/runtime"
 )
 
 type Client interface {
@@ -46,8 +45,13 @@ type Writer interface {
 }
 
 type Object interface {
-	v1.Object
 	runtime.Object
+	GetName() string
+	SetName(name string)
+	GetGeneration() int64
+	SetGeneration(generation int64)
+	GetResourceVersion() string
+	SetResourceVersion(resourceVersion string)
 }
 
 type ObjectList interface {

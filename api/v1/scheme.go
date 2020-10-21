@@ -16,7 +16,7 @@ limitations under the License.
 
 package v1
 
-import "github.com/routerd/ipv6d/internal/runtime"
+import "routerd.net/ipv6d/internal/machinery/runtime"
 
 var (
 	Version       = "v1"
