@@ -27,9 +27,9 @@ import (
 	"github.com/sirupsen/logrus"
 
 	v1 "routerd.net/ipv6d/api/v1"
+	"routerd.net/ipv6d/internal/controllers"
 	"routerd.net/ipv6d/internal/machinery/runtime"
 	"routerd.net/ipv6d/internal/machinery/state"
-	"routerd.net/ipv6d/internal/npt"
 )
 
 func main() {
@@ -51,18 +51,18 @@ func run(log logr.Logger, configFolder string) error {
 		return err
 	}
 
-	metaRepo, err := state.NewMetaRepository(scheme)
+	metaRepo, err := state.NewMetaRepository(log.WithName("repository"), scheme)
 	if err != nil {
 		return err
 	}
 	stopCh := make(chan struct{})
 	go metaRepo.Run(stopCh)
 
-	if err := metaRepo.LoadFromFileSystem(log, configFolder); err != nil {
+	if err := metaRepo.LoadFromFileSystem(configFolder); err != nil {
 		return err
 	}
 
-	r, err := npt.NewReconciler(log.WithName("NPTController"), metaRepo, 5*time.Second)
+	r, err := controllers.NewNPTReconciler(log.WithName("NPTController"), metaRepo, 5*time.Second)
 	if err != nil {
 		return err
 	}

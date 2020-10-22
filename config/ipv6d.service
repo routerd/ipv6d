@@ -1,0 +1,8 @@
+[Unit]
+Description=IPv6 auto configuration daemon
+
+[Service]
+ExecStart=/config/scripts/ipv6d -config-folder /config/scripts/ipv6d.d
+
+[Install]
+WantedBy=multi-user.target

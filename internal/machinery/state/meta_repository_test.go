@@ -21,11 +21,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"routerd.net/ipv6d/internal/testutil"
 )
 
 func TestMetaRepository(t *testing.T) {
 	t.Run("LoadFromFileSystem", func(t *testing.T) {
-		r, err := NewMetaRepository(testScheme)
+		log := testutil.NewLogger(t)
+		r, err := NewMetaRepository(log, testScheme)
 		require.NoError(t, err)
 
 		// Run

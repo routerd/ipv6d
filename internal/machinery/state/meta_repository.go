@@ -31,12 +31,17 @@ import (
 )
 
 type MetaRepository struct {
+	log      logr.Logger
 	scheme   *runtime.Scheme
 	vkToRepo map[runtime.VersionKind]*Repository
 }
 
-func NewMetaRepository(scheme *runtime.Scheme) (*MetaRepository, error) {
+func NewMetaRepository(
+	log logr.Logger,
+	scheme *runtime.Scheme,
+) (*MetaRepository, error) {
 	mr := &MetaRepository{
+		log:      log,
 		scheme:   scheme,
 		vkToRepo: map[runtime.VersionKind]*Repository{},
 	}
@@ -69,9 +74,7 @@ func NewMetaRepository(scheme *runtime.Scheme) (*MetaRepository, error) {
 	return mr, nil
 }
 
-func (r *MetaRepository) LoadFromFileSystem(
-	log logr.Logger, folder string,
-) error {
+func (r *MetaRepository) LoadFromFileSystem(folder string) error {
 	err := filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -102,7 +105,7 @@ func (r *MetaRepository) LoadFromFileSystem(
 			}
 
 			// store
-			log.Info(fmt.Sprintf(
+			r.log.Info(fmt.Sprintf(
 				"imported %s %s", obj.GetObjectKind(), obj.(Object).GetName()))
 			if err := r.Create(context.TODO(), obj.(Object)); err != nil {
 				return err

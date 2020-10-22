@@ -22,8 +22,6 @@ import (
 	"routerd.net/ipv6d/internal/machinery/runtime"
 )
 
-var _ Object = &NetworkMap{}
-
 type NetworkMapList struct {
 	TypeMeta `json:",inline"`
 	Items    []NetworkMap `json:"items"`
