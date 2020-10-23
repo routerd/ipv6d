@@ -32,6 +32,11 @@ import (
 	"routerd.net/ipv6d/internal/utils/ipv6"
 )
 
+const (
+	ipv6dOutboundChain = "IPV6D-OUTBOUND"
+	ipv6dInboundChain  = "IPV6D-INBOUND"
+)
+
 // NPTReconciler ensures private networks are mapped to public networks via Network Prefix Translation.
 type NPTReconciler struct {
 	log            logr.Logger
@@ -112,19 +117,56 @@ func (r *NPTReconciler) Reconcile(key string) (res controller.Result, err error)
 		return res, err
 	}
 
+	log := r.log.WithValues("networkmap", netmap.Name)
 	res.RequeueAfter = r.resyncDuration
-
 	netmap.Status.NetMap = nil
-	for _, rule := range r.rules(netmap) {
+
+	// Ensure Chains
+	if _, err := r.ip6tables.List("nat", ipv6dOutboundChain); err != nil {
+		// create the chain
+		if err := r.ip6tables.NewChain("nat", ipv6dOutboundChain); err != nil {
+			return res, fmt.Errorf("creating %s chain: %w", ipv6dOutboundChain, err)
+		}
+	}
+	if _, err := r.ip6tables.List("nat", ipv6dInboundChain); err != nil {
+		// create the chain
+		if err := r.ip6tables.NewChain("nat", ipv6dInboundChain); err != nil {
+			return res, fmt.Errorf("creating %s chain: %w", ipv6dInboundChain, err)
+		}
+	}
+
+	// Ensure Chain target
+	if err := r.ip6tables.AppendUnique(
+		"nat", "POSTROUTING", "-j", ipv6dOutboundChain); err != nil {
+		return res, fmt.Errorf("add jump to chain: %w", err)
+	}
+	if err := r.ip6tables.AppendUnique(
+		"nat", "PREROUTING", "-j", ipv6dInboundChain); err != nil {
+		return res, fmt.Errorf("add jump to chain: %w", err)
+	}
+
+	// Check if we need to flush
+	rules := r.rules(netmap)
+	for _, rule := range rules {
 		exists, err := r.ip6tables.Exists(rule.Table, rule.Chain, rule.Spec...)
 		if err != nil {
-			return res, fmt.Errorf("checking rule exists: %w", err)
+			return res, fmt.Errorf("check if rule exists: %w", err)
 		}
-
 		if exists {
 			continue
 		}
-		if err := r.ip6tables.Append(rule.Table, rule.Chain, rule.Spec...); err != nil {
+
+		// A rule changed!
+		// Better clear the whole chain to remove stale rules.
+		log.Info("clearing chain", "chain", rule.Chain)
+		if err := r.ip6tables.ClearChain("nat", rule.Chain); err != nil {
+			return res, fmt.Errorf("clearing chain %s: %w", rule.Chain, err)
+		}
+	}
+
+	// Ensure rules in chains
+	for _, rule := range rules {
+		if err := r.ip6tables.AppendUnique(rule.Table, rule.Chain, rule.Spec...); err != nil {
 			return res, fmt.Errorf("append new rule: %w", err)
 		}
 	}
@@ -133,7 +175,7 @@ func (r *NPTReconciler) Reconcile(key string) (res controller.Result, err error)
 		return res, err
 	}
 
-	r.log.Info("reconciled NetworkMap", "name", key)
+	log.Info("reconciled")
 	return
 }
 
@@ -143,7 +185,11 @@ type rule struct {
 }
 
 func (r *NPTReconciler) rules(netmap *v1.NetworkMap) []rule {
-	var rules []rule
+	rules := []rule{
+		{
+			Table: "nat", Chain: ipv6dOutboundChain,
+		},
+	}
 
 	for i, nm := range netmap.Spec.NetMap {
 		inbound, outbound, status, err := r.rule(netmap.Spec.WANInterface, nm)
@@ -172,7 +218,7 @@ func (r *NPTReconciler) rule(wanInterface string, netmap v1.NetMap) (
 	}
 
 	outbound = &rule{
-		Table: "nat", Chain: "POSTROUTING",
+		Table: "nat", Chain: ipv6dOutboundChain,
 		Spec: []string{
 			"-o", wanInterface,
 			"-s", privateNetwork.String(),
@@ -182,7 +228,7 @@ func (r *NPTReconciler) rule(wanInterface string, netmap v1.NetMap) (
 	}
 
 	inbound = &rule{
-		Table: "nat", Chain: "PREROUTING",
+		Table: "nat", Chain: ipv6dInboundChain,
 		Spec: []string{
 			"-i", wanInterface,
 			"-d", publicNetwork.String(),
@@ -237,6 +283,9 @@ func (r *NPTReconciler) lookupNetworkFromInterface(ifaceName string) (*net.IPNet
 			continue
 		}
 		if ipv6.IsLinkLocal(ip) {
+			continue
+		}
+		if ipv6.IsPrivate(ip) {
 			continue
 		}
 

@@ -17,11 +17,19 @@ package ipv6
 
 import "net"
 
-var LinkLocalNet *net.IPNet
+var (
+	LinkLocalNet *net.IPNet
+	PrivateNet   *net.IPNet
+)
 
 // IsLinkLocal checks whether the given IP is in the fe80::/10 network.
 func IsLinkLocal(ip net.IP) bool {
 	return LinkLocalNet.Contains(ip)
+}
+
+// IsPrivate checks wether the given IP is in the fd00::/8 private network range.
+func IsPrivate(ip net.IP) bool {
+	return PrivateNet.Contains(ip)
 }
 
 // IsIPv6 checks wether the given IP is IPv6
@@ -32,6 +40,11 @@ func IsIPv6(ip net.IP) bool {
 func init() {
 	var err error
 	_, LinkLocalNet, err = net.ParseCIDR("fe80::/10")
+	if err != nil {
+		panic(err)
+	}
+
+	_, PrivateNet, err = net.ParseCIDR("fd00::/8")
 	if err != nil {
 		panic(err)
 	}

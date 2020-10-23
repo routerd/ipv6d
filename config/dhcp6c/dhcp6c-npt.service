@@ -1,0 +1,10 @@
+[Unit]
+Description=DHCPv6 Client for NPT Prefix Delegation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/sbin/dhcp6c -c /home/nico/dhcp6c-lab.conf -p /var/run/dhcp6c-npt.pid -df eth0
+
+[Install]
+WantedBy=multi-user.target
